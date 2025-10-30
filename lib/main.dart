@@ -1,122 +1,343 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'firebase_options.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const LifeHelperApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class LifeHelperApp extends StatelessWidget {
+  const LifeHelperApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'LifeHelper',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        primarySwatch: Colors.orange,
+        scaffoldBackgroundColor: const Color(0xFFF9F8F6),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const AuthGate(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  Future<UserCredential?> _signInWithGoogle() async {
+    final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) return null;
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+    final GoogleSignInAuthentication googleAuth =
+        await googleUser.authentication;
 
-  final String title;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+    return await FirebaseAuth.instance.signInWithCredential(credential);
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return const TaskPage();
+        }
+        return Scaffold(
+          backgroundColor: const Color(0xFFF9F8F6),
+          body: Center(
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.login),
+              label: const Text("Войти через Google"),
+              onPressed: () async {
+                await _signInWithGoogle();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class TaskPage extends StatefulWidget {
+  const TaskPage({super.key});
+
+  @override
+  State<TaskPage> createState() => _TaskPageState();
+}
+
+class _TaskPageState extends State<TaskPage> {
+  final TextEditingController _taskController = TextEditingController();
+  User? user = FirebaseAuth.instance.currentUser;
+  int totalPoints = 0;
+  String motivationText = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserPoints();
+  }
+
+  Future<void> _loadUserPoints() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .get();
+
+    if (doc.exists) {
+      setState(() {
+        totalPoints = doc['points'] ?? 0;
+      });
+    } else {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .set({'name': user!.displayName, 'points': 0});
+    }
+  }
+
+  Future<void> _updateUserPoints(int points) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .update({'points': points});
+  }
+
+  Future<void> _addTask() async {
+    if (_taskController.text.isEmpty) return;
+
+    await FirebaseFirestore.instance.collection('tasks').add({
+      'title': _taskController.text,
+      'completed': false,
+      'points': 10,
+      'userId': user!.uid,
+    });
+
+    _taskController.clear();
+  }
+
+  Future<void> _toggleTask(String id, bool completed, int points) async {
+    await FirebaseFirestore.instance.collection('tasks').doc(id).update({
+      'completed': !completed,
+    });
+
+    if (!completed) {
+      setState(() {
+        totalPoints += points;
+        motivationText = _getRandomMotivation();
+      });
+    } else {
+      setState(() {
+        totalPoints -= points;
+      });
+    }
+
+    await _updateUserPoints(totalPoints);
+  }
+
+  Future<void> _deleteTask(String id) async {
+    await FirebaseFirestore.instance.collection('tasks').doc(id).delete();
+  }
+
+  String _getRandomMotivation() {
+    final messages = [
+      "Отлично! 💪 Один шаг ближе к цели!",
+      "Ты молодец! Продолжай в том же духе! 🔥",
+      "Супер! Ещё одна победа! 🏆",
+      "Так держать! 🌟",
+      "Твоя дисциплина приносит результат! 🚀",
+    ];
+    messages.shuffle();
+    return messages.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('LifeHelper ✅'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: "Задачи"),
+              Tab(text: "Рейтинг"),
+            ],
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                child: Text(
+                  "Баллы: $totalPoints",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),
+        body: TabBarView(
+          children: [
+            _buildTasksTab(),
+            _buildLeaderboardTab(),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+
+  Widget _buildTasksTab() {
+    return Column(
+      children: [
+        if (motivationText.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Text(
+              motivationText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontStyle: FontStyle.italic,
+                color: Colors.orange,
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _taskController,
+                  decoration: const InputDecoration(
+                    labelText: 'Введите задачу...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _addTask,
+                child: const Text('Добавить'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('tasks')
+                .where('userId', isEqualTo: user!.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final tasks = snapshot.data!.docs;
+
+              return ListView.builder(
+                itemCount: tasks.length,
+                itemBuilder: (context, index) {
+                  final task = tasks[index];
+                  final title = task['title'];
+                  final completed = task['completed'];
+                  final points = task['points'];
+
+                  return Card(
+                    color: completed ? Colors.green[50] : Colors.white,
+                    margin:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      title: Text(
+                        title,
+                        style: TextStyle(
+                          decoration: completed
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                      subtitle: Text('Баллы: $points'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              completed
+                                  ? Icons.check_box
+                                  : Icons.check_box_outline_blank,
+                              color: Colors.orange,
+                            ),
+                            onPressed: () =>
+                                _toggleTask(task.id, completed, points),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _deleteTask(task.id),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLeaderboardTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .orderBy('points', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final users = snapshot.data!.docs;
+
+        return ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final name = users[index]['name'];
+            final points = users[index]['points'];
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor:
+                    index == 0 ? Colors.amber : Colors.orangeAccent,
+                child: Text("${index + 1}"),
+              ),
+              title: Text(name ?? "Без имени"),
+              trailing: Text(
+                "$points очков",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
