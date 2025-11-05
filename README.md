@@ -1,16 +1,17 @@
-# lifehelper
+LifeHelper
 
-A new Flutter project.
+LifeHelper — приложение для организации задач и мотивации, созданное на Flutter с интеграцией Firebase.
 
-## Getting Started
+## ✨ Возможности
+- Авторизация через Google
+- Добавление задач и заметок
+- Система уровней и очков
+- Почасовые уведомления
+- Мотивационные цитаты из API
+- Рейтинг пользователей (по очкам)
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠 Технологии
+- Flutter / Dart  
+- Firebase Auth / Firestore  
+- Flutter Local Notifications  
+- ZenQuotes / Adviceslip API  
